@@ -1,98 +1,81 @@
-Option Explicit
-
-Sub MeanPreservingSpline()
-    Dim N As Long
+Function MeanPreservingSplineCoeffs(xRange As Range, yRange As Range) As Variant
+    Dim N As Long, i As Long
     Dim x() As Double, y() As Double
     Dim h As Double
+    Dim M() As Double
+    Dim A() As Double, B() As Double, C() As Double, D() As Double
+    Dim cPrime() As Double, dPrime() As Double
     Dim a() As Double, b() As Double, c() As Double, d() As Double
-    Dim i As Long
-    
-    ' === STEP 1: Read input from Sheet1 columns A (x) and B (mean y) ===
-    N = WorksheetFunction.CountA(Sheet1.Range("A:A"))
-    
-    If N < 3 Then
-        MsgBox "Need at least 3 data points.", vbExclamation
-        Exit Sub
+    Dim output() As Variant
+
+    N = xRange.Count
+    If N <> yRange.Count Or N < 3 Then
+        MeanPreservingSplineCoeffs = CVErr(xlErrValue)
+        Exit Function
     End If
-    
+
     ReDim x(1 To N)
     ReDim y(1 To N)
-    
+
     For i = 1 To N
-        x(i) = Sheet1.Cells(i, 1).Value
-        y(i) = Sheet1.Cells(i, 2).Value
+        x(i) = xRange.Cells(i, 1).Value
+        y(i) = yRange.Cells(i, 1).Value
     Next i
-    
-    ' Assume uniform spacing for simplicity
-    h = x(2) - x(1)
-    
-    ' === STEP 2: Construct tridiagonal system ===
-    ' Use second derivatives at internal nodes
-    Dim M() As Double
+
+    h = x(2) - x(1) ' Assume uniform spacing
+
     ReDim M(1 To N)
-    
-    Dim A() As Double, B() As Double, C() As Double, D() As Double
-    ReDim A(2 To N - 1)
-    ReDim B(2 To N - 1)
-    ReDim C(2 To N - 1)
-    ReDim D(2 To N - 1)
-    
+    ReDim A(2 To N - 1), B(2 To N - 1), C(2 To N - 1), D(2 To N - 1)
+
+    ' Build tridiagonal system
     For i = 2 To N - 1
         A(i) = h / 6
         B(i) = 2 * h / 3
         C(i) = h / 6
         D(i) = (y(i + 1) - y(i)) - (y(i) - y(i - 1))
     Next i
-    
-    ' Solve tridiagonal system using Thomas algorithm
-    Dim c_prime() As Double, d_prime() As Double
-    ReDim c_prime(2 To N - 1)
-    ReDim d_prime(2 To N - 1)
-    
-    c_prime(2) = C(2) / B(2)
-    d_prime(2) = D(2) / B(2)
-    
+
+    ' Thomas algorithm
+    ReDim cPrime(2 To N - 1)
+    ReDim dPrime(2 To N - 1)
+
+    cPrime(2) = C(2) / B(2)
+    dPrime(2) = D(2) / B(2)
+
     For i = 3 To N - 2
-        c_prime(i) = C(i) / (B(i) - A(i) * c_prime(i - 1))
-        d_prime(i) = (D(i) - A(i) * d_prime(i - 1)) / (B(i) - A(i) * c_prime(i - 1))
+        Dim denom As Double
+        denom = B(i) - A(i) * cPrime(i - 1)
+        cPrime(i) = C(i) / denom
+        dPrime(i) = (D(i) - A(i) * dPrime(i - 1)) / denom
     Next i
-    
-    M(N - 1) = d_prime(N - 2)
+
+    M(N - 1) = dPrime(N - 2)
     For i = N - 2 To 2 Step -1
-        M(i) = d_prime(i) - c_prime(i) * M(i + 1)
+        M(i) = dPrime(i) - cPrime(i) * M(i + 1)
     Next i
-    
-    ' Boundary conditions (natural spline)
+
     M(1) = 0
     M(N) = 0
-    
-    ' === STEP 3: Compute spline coefficients for each interval ===
+
+    ' Compute spline coefficients
     ReDim a(1 To N - 1)
     ReDim b(1 To N - 1)
     ReDim c(1 To N - 1)
     ReDim d(1 To N - 1)
-    
+    ReDim output(1 To N - 1, 1 To 5)
+
     For i = 1 To N - 1
         a(i) = y(i)
         b(i) = (y(i + 1) - y(i)) / h - h * (M(i + 1) + 2 * M(i)) / 6
         c(i) = M(i) / 2
         d(i) = (M(i + 1) - M(i)) / (6 * h)
+
+        output(i, 1) = a(i)
+        output(i, 2) = b(i)
+        output(i, 3) = c(i)
+        output(i, 4) = d(i)
+        output(i, 5) = x(i)
     Next i
-    
-    ' === STEP 4: Output spline coefficients ===
-    Sheet1.Cells(1, 4).Value = "a"
-    Sheet1.Cells(1, 5).Value = "b"
-    Sheet1.Cells(1, 6).Value = "c"
-    Sheet1.Cells(1, 7).Value = "d"
-    Sheet1.Cells(1, 8).Value = "Interval Start"
-    
-    For i = 1 To N - 1
-        Sheet1.Cells(i + 1, 4).Value = a(i)
-        Sheet1.Cells(i + 1, 5).Value = b(i)
-        Sheet1.Cells(i + 1, 6).Value = c(i)
-        Sheet1.Cells(i + 1, 7).Value = d(i)
-        Sheet1.Cells(i + 1, 8).Value = x(i)
-    Next i
-    
-    MsgBox "Mean-preserving spline coefficients computed!"
-End Sub
+
+    MeanPreservingSplineCoeffs = output
+End Function
