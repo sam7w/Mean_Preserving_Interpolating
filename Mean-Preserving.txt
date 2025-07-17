@@ -1,3 +1,4 @@
+' ========= Function 1: Compute spline coefficients =========
 Function MeanPreservingSplineCoeffs(xRange As Range, yRange As Range) As Variant
     Dim N As Long, i As Long
     Dim x() As Double, y() As Double
@@ -5,7 +6,7 @@ Function MeanPreservingSplineCoeffs(xRange As Range, yRange As Range) As Variant
     Dim M() As Double
     Dim A() As Double, B() As Double, C() As Double, D() As Double
     Dim cPrime() As Double, dPrime() As Double
-    Dim a() As Double, b() As Double, c() As Double, d() As Double
+    Dim coeffA() As Double, coeffB() As Double, coeffC() As Double, coeffD() As Double
     Dim output() As Variant
 
     N = xRange.Count
@@ -58,55 +59,60 @@ Function MeanPreservingSplineCoeffs(xRange As Range, yRange As Range) As Variant
     M(N) = 0
 
     ' Compute spline coefficients
-    ReDim a(1 To N - 1)
-    ReDim b(1 To N - 1)
-    ReDim c(1 To N - 1)
-    ReDim d(1 To N - 1)
+    ReDim coeffA(1 To N - 1)
+    ReDim coeffB(1 To N - 1)
+    ReDim coeffC(1 To N - 1)
+    ReDim coeffD(1 To N - 1)
     ReDim output(1 To N - 1, 1 To 5)
 
     For i = 1 To N - 1
-        a(i) = y(i)
-        b(i) = (y(i + 1) - y(i)) / h - h * (M(i + 1) + 2 * M(i)) / 6
-        c(i) = M(i) / 2
-        d(i) = (M(i + 1) - M(i)) / (6 * h)
+        coeffA(i) = y(i)
+        coeffB(i) = (y(i + 1) - y(i)) / h - h * (M(i + 1) + 2 * M(i)) / 6
+        coeffC(i) = M(i) / 2
+        coeffD(i) = (M(i + 1) - M(i)) / (6 * h)
 
-        output(i, 1) = a(i)
-        output(i, 2) = b(i)
-        output(i, 3) = c(i)
-        output(i, 4) = d(i)
+        output(i, 1) = coeffA(i)
+        output(i, 2) = coeffB(i)
+        output(i, 3) = coeffC(i)
+        output(i, 4) = coeffD(i)
         output(i, 5) = x(i)
     Next i
 
     MeanPreservingSplineCoeffs = output
 End Function
 
-
-
-Function EvaluateSpline(x As Double, _
-                        coeffs As Range) As Double
+' ========= Function 2: Evaluate spline at arbitrary x =========
+Function EvaluateSpline(xVal As Double, coeffs As Range) As Double
     Dim i As Long, n As Long
     Dim a As Double, b As Double, c As Double, d As Double
-    Dim x_start As Double
+    Dim xStart As Double, xNext As Double
     Dim delta As Double
 
     n = coeffs.Rows.Count
 
-    ' Find correct interval
-    For i = 1 To n - 1
-        If x >= coeffs.Cells(i, 5).Value And x < coeffs.Cells(i + 1, 5).Value Then
+    ' Find the interval where xVal belongs
+    For i = 1 To n
+        xStart = coeffs.Cells(i, 5).Value
+        If i < n Then
+            xNext = coeffs.Cells(i + 1, 5).Value
+        Else
+            xNext = xStart + (xStart - coeffs.Cells(i - 1, 5).Value) ' extrapolate last interval
+        End If
+
+        If xVal >= xStart And xVal < xNext Then
             Exit For
         End If
     Next i
 
-    ' For last interval or beyond range
-    If i = n Then i = n - 1
+    ' Clamp to last interval if xVal beyond range
+    If i > n Then i = n
 
     a = coeffs.Cells(i, 1).Value
     b = coeffs.Cells(i, 2).Value
     c = coeffs.Cells(i, 3).Value
     d = coeffs.Cells(i, 4).Value
-    x_start = coeffs.Cells(i, 5).Value
+    xStart = coeffs.Cells(i, 5).Value
 
-    delta = x - x_start
+    delta = xVal - xStart
     EvaluateSpline = a + b * delta + c * delta ^ 2 + d * delta ^ 3
 End Function
