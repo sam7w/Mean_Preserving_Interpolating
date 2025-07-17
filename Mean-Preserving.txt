@@ -1,42 +1,43 @@
-' ========= Function 1: Compute spline coefficients =========
-Function MeanPreservingSplineCoeffs(xRange As Range, yRange As Range) As Variant
-    Dim N As Long, i As Long
-    Dim x() As Double, y() As Double
-    Dim h As Double
+Function MeanPreservingBusinessDaysWithHolidays(weeklyAverages As Range, _
+                                                 businessDayCounts As Range, _
+                                                 startDate As Date) As Variant
+    Dim N As Long, totalDays As Long, i As Long, j As Long
+    Dim y() As Double, daysPerWeek() As Long
     Dim M() As Double
     Dim A() As Double, B() As Double, C() As Double, D() As Double
     Dim cPrime() As Double, dPrime() As Double
-    Dim coeffA() As Double, coeffB() As Double, coeffC() As Double, coeffD() As Double
-    Dim output() As Variant
+    Dim a As Double, b As Double, c As Double, d As Double
+    Dim delta As Double, t As Double
+    Dim dIndex As Long
+    Dim result() As Variant
+    Dim currentDate As Date
 
-    N = xRange.Count
-    If N <> yRange.Count Or N < 3 Then
-        MeanPreservingSplineCoeffs = CVErr(xlErrValue)
+    N = weeklyAverages.Count
+    If N < 3 Or businessDayCounts.Count <> N Then
+        MeanPreservingBusinessDaysWithHolidays = CVErr(xlErrRef)
         Exit Function
     End If
 
-    ReDim x(1 To N)
+    ' Store weekly average values and business day counts
     ReDim y(1 To N)
-
+    ReDim daysPerWeek(1 To N)
     For i = 1 To N
-        x(i) = xRange.Cells(i, 1).Value
-        y(i) = yRange.Cells(i, 1).Value
+        y(i) = weeklyAverages.Cells(i, 1).Value
+        daysPerWeek(i) = businessDayCounts.Cells(i, 1).Value
+        totalDays = totalDays + daysPerWeek(i)
     Next i
 
-    h = x(2) - x(1) ' Assume uniform spacing
-
+    ' Step 1: Solve for spline second derivatives (M)
     ReDim M(1 To N)
     ReDim A(2 To N - 1), B(2 To N - 1), C(2 To N - 1), D(2 To N - 1)
 
-    ' Build tridiagonal system
     For i = 2 To N - 1
-        A(i) = h / 6
-        B(i) = 2 * h / 3
-        C(i) = h / 6
+        A(i) = 1 / 6
+        B(i) = 2 / 3
+        C(i) = 1 / 6
         D(i) = (y(i + 1) - y(i)) - (y(i) - y(i - 1))
     Next i
 
-    ' Thomas algorithm
     ReDim cPrime(2 To N - 1)
     ReDim dPrime(2 To N - 1)
 
@@ -58,61 +59,49 @@ Function MeanPreservingSplineCoeffs(xRange As Range, yRange As Range) As Variant
     M(1) = 0
     M(N) = 0
 
-    ' Compute spline coefficients
-    ReDim coeffA(1 To N - 1)
-    ReDim coeffB(1 To N - 1)
-    ReDim coeffC(1 To N - 1)
-    ReDim coeffD(1 To N - 1)
-    ReDim output(1 To N - 1, 1 To 5)
+    ' Step 2: Evaluate spline and build output
+    ReDim result(1 To totalDays, 1 To 2)
+    dIndex = 1
+    currentDate = startDate
 
     For i = 1 To N - 1
-        coeffA(i) = y(i)
-        coeffB(i) = (y(i + 1) - y(i)) / h - h * (M(i + 1) + 2 * M(i)) / 6
-        coeffC(i) = M(i) / 2
-        coeffD(i) = (M(i + 1) - M(i)) / (6 * h)
+        a = y(i)
+        b = (y(i + 1) - y(i)) - (M(i + 1) + 2 * M(i)) / 6
+        c = M(i) / 2
+        d = (M(i + 1) - M(i)) / 6
 
-        output(i, 1) = coeffA(i)
-        output(i, 2) = coeffB(i)
-        output(i, 3) = coeffC(i)
-        output(i, 4) = coeffD(i)
-        output(i, 5) = x(i)
+        For j = 0 To daysPerWeek(i) - 1
+            delta = j / daysPerWeek(i)
+            t = a + b * delta + c * delta ^ 2 + d * delta ^ 3
+
+            ' Skip weekends
+            Do While Weekday(currentDate, vbMonday) > 5
+                currentDate = currentDate + 1
+            Loop
+
+            result(dIndex, 1) = currentDate
+            result(dIndex, 2) = t
+            dIndex = dIndex + 1
+            currentDate = currentDate + 1
+        Next j
     Next i
 
-    MeanPreservingSplineCoeffs = output
+    MeanPreservingBusinessDaysWithHolidays = result
 End Function
 
-' ========= Function 2: Evaluate spline at arbitrary x =========
-Function EvaluateSpline(xVal As Double, coeffs As Range) As Double
-    Dim i As Long, n As Long
-    Dim a As Double, b As Double, c As Double, d As Double
-    Dim xStart As Double, xNext As Double
-    Dim delta As Double
 
-    n = coeffs.Rows.Count
+Function EvaluateDailySplineValue(targetDate As Date, _
+                                   splineOutput As Range) As Variant
+    Dim i As Long
+    Dim n As Long
+    n = splineOutput.Rows.Count
 
-    ' Find the interval where xVal belongs
     For i = 1 To n
-        xStart = coeffs.Cells(i, 5).Value
-        If i < n Then
-            xNext = coeffs.Cells(i + 1, 5).Value
-        Else
-            xNext = xStart + (xStart - coeffs.Cells(i - 1, 5).Value) ' extrapolate last interval
-        End If
-
-        If xVal >= xStart And xVal < xNext Then
-            Exit For
+        If splineOutput.Cells(i, 1).Value = targetDate Then
+            EvaluateDailySplineValue = splineOutput.Cells(i, 2).Value
+            Exit Function
         End If
     Next i
 
-    ' Clamp to last interval if xVal beyond range
-    If i > n Then i = n
-
-    a = coeffs.Cells(i, 1).Value
-    b = coeffs.Cells(i, 2).Value
-    c = coeffs.Cells(i, 3).Value
-    d = coeffs.Cells(i, 4).Value
-    xStart = coeffs.Cells(i, 5).Value
-
-    delta = xVal - xStart
-    EvaluateSpline = a + b * delta + c * delta ^ 2 + d * delta ^ 3
+    EvaluateDailySplineValue = CVErr(xlErrNA) ' Not found
 End Function
