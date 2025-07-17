@@ -79,3 +79,34 @@ Function MeanPreservingSplineCoeffs(xRange As Range, yRange As Range) As Variant
 
     MeanPreservingSplineCoeffs = output
 End Function
+
+
+
+Function EvaluateSpline(x As Double, _
+                        coeffs As Range) As Double
+    Dim i As Long, n As Long
+    Dim a As Double, b As Double, c As Double, d As Double
+    Dim x_start As Double
+    Dim delta As Double
+
+    n = coeffs.Rows.Count
+
+    ' Find correct interval
+    For i = 1 To n - 1
+        If x >= coeffs.Cells(i, 5).Value And x < coeffs.Cells(i + 1, 5).Value Then
+            Exit For
+        End If
+    Next i
+
+    ' For last interval or beyond range
+    If i = n Then i = n - 1
+
+    a = coeffs.Cells(i, 1).Value
+    b = coeffs.Cells(i, 2).Value
+    c = coeffs.Cells(i, 3).Value
+    d = coeffs.Cells(i, 4).Value
+    x_start = coeffs.Cells(i, 5).Value
+
+    delta = x - x_start
+    EvaluateSpline = a + b * delta + c * delta ^ 2 + d * delta ^ 3
+End Function
